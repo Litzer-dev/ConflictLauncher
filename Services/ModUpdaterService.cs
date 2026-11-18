@@ -165,12 +165,21 @@ public sealed class ModUpdaterService
         using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-        if (File.Exists(destinationPath))
-            File.SetAttributes(destinationPath, FileAttributes.Normal);
-        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var output = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true);
-        await input.CopyToAsync(output, cancellationToken);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            if (File.Exists(destinationPath))
+                File.SetAttributes(destinationPath, FileAttributes.Normal);
+            await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
+            await using var output = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true);
+            await input.CopyToAsync(output, cancellationToken);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new UnauthorizedAccessException(
+                $"Access denied writing '{destinationPath}'. Make sure the game is closed, and check Windows Security (Controlled Folder Access / Defender) if it blocked the file.",
+                ex);
+        }
     }
 
     private static void ExtractModZipToGameDir(string zipPath, string gameDirectory)
@@ -204,10 +213,19 @@ public sealed class ModUpdaterService
             if (!destPath.StartsWith(Path.GetFullPath(gameDirectory), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Unsafe zip entry path: {entry.FullName}");
 
-            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-            if (File.Exists(destPath))
-                File.SetAttributes(destPath, FileAttributes.Normal);
-            entry.ExtractToFile(destPath, overwrite: true);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                if (File.Exists(destPath))
+                    File.SetAttributes(destPath, FileAttributes.Normal);
+                entry.ExtractToFile(destPath, overwrite: true);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Access denied writing '{destPath}'. Make sure the game is closed, and check Windows Security (Controlled Folder Access / Defender) if it blocked the file.",
+                    ex);
+            }
         }
     }
 }
