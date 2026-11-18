@@ -194,6 +194,9 @@ public sealed class GameInstallerService
             if (!overwriteIni && targetName.Equals("squadmod.ini", StringComparison.OrdinalIgnoreCase) && File.Exists(targetPath))
                 continue;
 
+            if (File.Exists(targetPath))
+                File.SetAttributes(targetPath, FileAttributes.Normal);
+
             using var stream = assembly.GetManifestResourceStream(resourceName)
                 ?? throw new InvalidOperationException($"Missing embedded resource: {resourceName}");
             using var outFile = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None);

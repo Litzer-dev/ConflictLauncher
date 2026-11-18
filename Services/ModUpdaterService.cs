@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -100,6 +101,10 @@ public sealed class ModUpdaterService
         if (release.Assets.Count == 0)
             throw new InvalidOperationException($"Release {release.TagName} has no downloadable assets.");
 
+        if (Process.GetProcessesByName("ConflictGlobal").Length > 0)
+            throw new InvalidOperationException(
+                "Conflict: Global Terror is currently running. Please close the game before updating SquadMod.");
+
         var hadIni = File.Exists(Path.Combine(gameDirectory, "squadmod.ini"));
         var previousSteamMode = hadIni && GameInstallerService.GetSteamMode(gameDirectory);
 
@@ -161,6 +166,8 @@ public sealed class ModUpdaterService
         response.EnsureSuccessStatusCode();
 
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        if (File.Exists(destinationPath))
+            File.SetAttributes(destinationPath, FileAttributes.Normal);
         await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
         await using var output = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true);
         await input.CopyToAsync(output, cancellationToken);
@@ -198,6 +205,8 @@ public sealed class ModUpdaterService
                 throw new InvalidDataException($"Unsafe zip entry path: {entry.FullName}");
 
             Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+            if (File.Exists(destPath))
+                File.SetAttributes(destPath, FileAttributes.Normal);
             entry.ExtractToFile(destPath, overwrite: true);
         }
     }
