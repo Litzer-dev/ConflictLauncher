@@ -101,7 +101,7 @@ public sealed class ModUpdaterService
         if (release.Assets.Count == 0)
             throw new InvalidOperationException($"Release {release.TagName} has no downloadable assets.");
 
-        if (Process.GetProcessesByName("ConflictGlobal").Length > 0)
+        if (GameInstallerService.FindRunningGameProcesses(gameDirectory).Count > 0)
             throw new InvalidOperationException(
                 "Conflict: Global Terror is currently running. Please close the game before updating SquadMod.");
 

@@ -373,8 +373,51 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool EnsureGameClosed(string gameDirectory)
+    {
+        var running = GameInstallerService.FindRunningGameProcesses(gameDirectory);
+        if (running.Count == 0)
+            return true;
+
+        var result = MessageBox.Show(
+            "Conflict: Global Terror is currently running and must be closed before updating.\n\nClose the game automatically and continue?",
+            "Game Is Running",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes)
+            return false;
+
+        foreach (var proc in running)
+        {
+            try
+            {
+                if (!proc.HasExited)
+                {
+                    proc.CloseMainWindow();
+                    if (!proc.WaitForExit(2000))
+                        proc.Kill(entireProcessTree: true);
+                    proc.WaitForExit(5000);
+                }
+            }
+            catch
+            {
+                // Ignore if already exited
+            }
+            finally
+            {
+                proc.Dispose();
+            }
+        }
+
+        return GameInstallerService.FindRunningGameProcesses(gameDirectory).Count == 0;
+    }
+
     private async Task InstallModIntoAsync(string gameDir)
     {
+        if (!EnsureGameClosed(gameDir))
+            return;
+
         _cts = new CancellationTokenSource();
         SetBusy(true);
         UpdatePipelineStep(4);
@@ -464,6 +507,9 @@ public partial class MainWindow : Window
             return;
 
         var gameDir = Path.GetDirectoryName(gameExe)!;
+        if (!EnsureGameClosed(gameDir))
+            return;
+
         _cts = new CancellationTokenSource();
         SetBusy(true);
         UpdatePipelineStep(4);

@@ -10,6 +10,43 @@ public sealed class GameInstallerService
 {
     private const string ResourcePrefix = "ConflictLauncher.ModFiles.";
 
+    public static IReadOnlyList<Process> FindRunningGameProcesses(string? gameDirectory)
+    {
+        var matches = new List<Process>();
+        var seenIds = new HashSet<int>();
+
+        foreach (var p in Process.GetProcessesByName("ConflictGlobal"))
+        {
+            if (seenIds.Add(p.Id))
+                matches.Add(p);
+        }
+
+        if (!string.IsNullOrWhiteSpace(gameDirectory))
+        {
+            var fullDir = Path.GetFullPath(gameDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            foreach (var p in Process.GetProcesses())
+            {
+                if (seenIds.Contains(p.Id))
+                    continue;
+                try
+                {
+                    var exe = p.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(exe) && exe.StartsWith(fullDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (seenIds.Add(p.Id))
+                            matches.Add(p);
+                    }
+                }
+                catch
+                {
+                    // Ignore processes that deny MainModule access
+                }
+            }
+        }
+
+        return matches;
+    }
+
     public static string? FindGameExecutable(string? rootDir)
     {
         if (string.IsNullOrWhiteSpace(rootDir) || !Directory.Exists(rootDir))
