@@ -165,20 +165,56 @@ public sealed class ModUpdaterService
         using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                PrepareDestinationForOverwrite(destinationPath);
+                await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
+                await using var output = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true);
+                await input.CopyToAsync(output, cancellationToken);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Access denied writing '{destinationPath}'. ({ex.Message}) Check Windows Security > Protection history in case Defender blocked it, or make sure the game is closed.",
+                    ex);
+            }
+    }
+
+    private static void PrepareDestinationForOverwrite(string destPath)
+    {
+        if (!File.Exists(destPath))
+            return;
+
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            if (File.Exists(destinationPath))
-                File.SetAttributes(destinationPath, FileAttributes.Normal);
-            await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using var output = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true);
-            await input.CopyToAsync(output, cancellationToken);
+            File.SetAttributes(destPath, FileAttributes.Normal);
         }
-        catch (UnauthorizedAccessException ex)
+        catch
         {
-            throw new UnauthorizedAccessException(
-                $"Access denied writing '{destinationPath}'. Make sure the game is closed, and check Windows Security (Controlled Folder Access / Defender) if it blocked the file.",
-                ex);
+            // Continue and attempt delete/move
+        }
+
+        try
+        {
+            File.Delete(destPath);
+        }
+        catch
+        {
+            try
+            {
+                var backup = destPath + ".old";
+                if (File.Exists(backup))
+                {
+                    File.SetAttributes(backup, FileAttributes.Normal);
+                    File.Delete(backup);
+                }
+                File.Move(destPath, backup, overwrite: true);
+            }
+            catch
+            {
+                // Let ExtractToFile/FileStream surface the exact error if still blocked
+            }
         }
     }
 
@@ -216,14 +252,13 @@ public sealed class ModUpdaterService
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                if (File.Exists(destPath))
-                    File.SetAttributes(destPath, FileAttributes.Normal);
+                PrepareDestinationForOverwrite(destPath);
                 entry.ExtractToFile(destPath, overwrite: true);
             }
             catch (UnauthorizedAccessException ex)
             {
                 throw new UnauthorizedAccessException(
-                    $"Access denied writing '{destPath}'. Make sure the game is closed, and check Windows Security (Controlled Folder Access / Defender) if it blocked the file.",
+                    $"Access denied writing '{destPath}'. ({ex.Message}) Check Windows Security > Protection history in case Defender blocked it, or make sure the game is closed.",
                     ex);
             }
         }
